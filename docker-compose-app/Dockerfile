@@ -1,17 +1,15 @@
-# Use official Python slim image as base
+# Stage 1: Builder - Install dependencies
 FROM python:3.11-slim AS builder
 
 # Set working directory inside container
 WORKDIR /app
 
-# Copy only required files first (to leverage Docker caching)
+# Install dependencies first for better caching
 COPY requirements.txt .
-
-# Install dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir --prefix=/install -r requirements.txt
 
-# Use a lightweight runtime image for the final build
+# Stage 2: Runtime - Use a lightweight Python image
 FROM python:3.11-slim
 
 # Set a non-root user for security
@@ -22,8 +20,7 @@ USER appuser
 WORKDIR /app
 
 # Copy installed dependencies from the builder stage
-COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
+COPY --from=builder /install /usr/local
 
 # Copy application files
 COPY . .
@@ -31,5 +28,11 @@ COPY . .
 # Expose port 5000
 EXPOSE 5000
 
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+# Run Flask app using Hypercorn
+CMD ["hypercorn", "app:asgi_app", "--bind", "0.0.0.0:5000"]
+
 # Run Flask app
-CMD ["python", "app.py"]
+# CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "5000"]
+
